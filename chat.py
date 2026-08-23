@@ -5,6 +5,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import Optional
+from raymine_client import get_raymine
 
 logger = logging.getLogger(__name__)
 
@@ -376,11 +377,15 @@ async def get_chat():
 @chat_app.post("/api/chat")
 async def chat(message_data: ChatMessage):
     """Chat endpoint for RayMine"""
-    from raymine_client import get_raymine
-    
     try:
         raymine = get_raymine()
-        result = raymine.think(message_data.message, message_data.retrieve_context)
+        
+        # Call think with correct parameters
+        result = raymine.think(
+            query=message_data.message,
+            retrieve_context=message_data.retrieve_context
+        )
+        
         return result
     except Exception as e:
         logger.error(f"Chat error: {str(e)}")
