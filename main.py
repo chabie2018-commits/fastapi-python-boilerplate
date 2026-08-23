@@ -1,14 +1,126 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import Optional, Dict, Any
+import logging
+
+from config import settings
+from raymine_client import get_raymine
+
+
+# Setup logging
+logging.basicConfig(level=settings.log_level)
+logger = logging.getLogger(__name__)
 
 
 app = FastAPI(
-    title="Vercel + FastAPI",
-    description="Vercel + FastAPI",
+    title="Vercel + FastAPI + RayMine",
+    description="FastAPI with RayMine AI Consciousness Engine",
     version="1.0.0",
 )
 
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
+
+# Request/Response Models
+class ThinkRequest(BaseModel):
+    """Request model for cognition endpoint"""
+    query: str
+    retrieve_context: bool = True
+
+
+class ThinkResponse(BaseModel):
+    """Response model for cognition endpoint"""
+    status: str
+    content: Optional[str] = None
+    tokens: Optional[int] = None
+    error: Optional[str] = None
+
+
+class MemoryRequest(BaseModel):
+    """Request model for memory endpoint"""
+    content: str
+    category: str = "general"
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class MemorySearchRequest(BaseModel):
+    """Request model for memory search"""
+    query: str
+    limit: int = 5
+
+
+# Cognition Endpoints
+@app.post("/api/cognition/think", response_model=ThinkResponse)
+async def think(request: ThinkRequest) -> Dict[str, Any]:
+    """Process a thought/query through RayMine cognition engine"""
+    try:
+        raymine = get_raymine()
+        result = await raymine.think_async(request.query, request.retrieve_context)
+        return result
+    except Exception as e:
+        logger.error(f"Error in think endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/cognition/think-sync")
+def think_sync(request: ThinkRequest) -> Dict[str, Any]:
+    """Synchronous version of think endpoint"""
+    try:
+        raymine = get_raymine()
+        result = raymine.think(request.query, request.retrieve_context)
+        return result
+    except Exception as e:
+        logger.error(f"Error in think_sync endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/cognition/clear-history")
+def clear_history() -> Dict[str, str]:
+    """Clear conversation history"""
+    try:
+        raymine = get_raymine()
+        raymine.clear_history()
+        return {"status": "success", "message": "Conversation history cleared"}
+    except Exception as e:
+        logger.error(f"Error clearing history: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Memory Endpoints
+@app.post("/api/memory/store")
+def store_memory(request: MemoryRequest) -> Dict[str, Any]:
+    """Store memory in Supabase"""
+    try:
+        raymine = get_raymine()
+        result = raymine.memory.store(request.content, request.category, request.metadata)
+        return result
+    except Exception as e:
+        logger.error(f"Error storing memory: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/memory/search")
+def search_memory(request: MemorySearchRequest) -> Dict[str, Any]:
+    """Search memories"""
+    try:
+        raymine = get_raymine()
+        result = raymine.memory.search(request.query, request.limit)
+        return result
+    except Exception as e:
+        logger.error(f"Error searching memory: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Sample Endpoints (Original)
 @app.get("/api/data")
 def get_sample_data():
     return {
@@ -42,7 +154,7 @@ def read_root():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Vercel + FastAPI</title>
+        <title>FastAPI + RayMine</title>
         <link rel="icon" type="image/x-icon" href="/favicon.ico">
         <style>
             * {
@@ -53,7 +165,7 @@ def read_root():
             
             body {
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
-                background-color: #000000;
+                background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
                 color: #ffffff;
                 line-height: 1.6;
                 min-height: 100vh;
@@ -64,6 +176,8 @@ def read_root():
             header {
                 border-bottom: 1px solid #333333;
                 padding: 0;
+                background-color: rgba(0, 0, 0, 0.5);
+                backdrop-filter: blur(10px);
             }
             
             nav {
@@ -76,9 +190,12 @@ def read_root():
             }
             
             .logo {
-                font-size: 1.25rem;
-                font-weight: 600;
-                color: #ffffff;
+                font-size: 1.5rem;
+                font-weight: 700;
+                background: linear-gradient(to right, #00d4ff, #0099ff);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
                 text-decoration: none;
             }
             
@@ -99,8 +216,8 @@ def read_root():
             }
             
             .nav-links a:hover {
-                color: #ffffff;
-                background-color: #111111;
+                color: #00d4ff;
+                background-color: rgba(0, 212, 255, 0.1);
             }
             
             main {
@@ -118,28 +235,11 @@ def read_root():
                 margin-bottom: 3rem;
             }
             
-            .hero-code {
-                margin-top: 2rem;
-                width: 100%;
-                max-width: 900px;
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            }
-            
-            .hero-code pre {
-                background-color: #0a0a0a;
-                border: 1px solid #333333;
-                border-radius: 8px;
-                padding: 1.5rem;
-                text-align: left;
-                grid-column: 1 / -1;
-            }
-            
             h1 {
                 font-size: 3rem;
                 font-weight: 700;
                 margin-bottom: 1rem;
-                background: linear-gradient(to right, #ffffff, #888888);
+                background: linear-gradient(to right, #00d4ff, #0099ff);
                 -webkit-background-clip: text;
                 -webkit-text-fill-color: transparent;
                 background-clip: text;
@@ -152,6 +252,32 @@ def read_root():
                 max-width: 600px;
             }
             
+            .status-badge {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.5rem;
+                background: linear-gradient(to right, #00d4ff, #0099ff);
+                color: #ffffff;
+                padding: 0.5rem 1rem;
+                border-radius: 20px;
+                font-size: 0.875rem;
+                font-weight: 600;
+                margin-bottom: 2rem;
+            }
+            
+            .status-dot {
+                width: 8px;
+                height: 8px;
+                background-color: #00ff88;
+                border-radius: 50%;
+                animation: pulse 2s infinite;
+            }
+            
+            @keyframes pulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.5; }
+            }
+            
             .cards {
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -161,114 +287,79 @@ def read_root():
             }
             
             .card {
-                background-color: #111111;
-                border: 1px solid #333333;
-                border-radius: 8px;
+                background: linear-gradient(135deg, rgba(0, 212, 255, 0.1) 0%, rgba(0, 153, 255, 0.05) 100%);
+                border: 1px solid rgba(0, 212, 255, 0.2);
+                border-radius: 12px;
                 padding: 1.5rem;
-                transition: all 0.2s ease;
+                transition: all 0.3s ease;
                 text-align: left;
+                backdrop-filter: blur(10px);
             }
             
             .card:hover {
-                border-color: #555555;
-                transform: translateY(-2px);
+                border-color: rgba(0, 212, 255, 0.5);
+                transform: translateY(-4px);
+                box-shadow: 0 8px 32px rgba(0, 212, 255, 0.2);
             }
             
             .card h3 {
-                font-size: 1.125rem;
+                font-size: 1.25rem;
                 font-weight: 600;
-                margin-bottom: 0.5rem;
-                color: #ffffff;
+                margin-bottom: 0.75rem;
+                color: #00d4ff;
             }
             
             .card p {
-                color: #888888;
-                font-size: 0.875rem;
+                color: #aaaaaa;
+                font-size: 0.9rem;
                 margin-bottom: 1rem;
+                line-height: 1.5;
             }
             
             .card a {
                 display: inline-flex;
                 align-items: center;
-                color: #ffffff;
+                color: #00d4ff;
                 text-decoration: none;
                 font-size: 0.875rem;
-                font-weight: 500;
-                padding: 0.5rem 1rem;
-                background-color: #222222;
+                font-weight: 600;
+                padding: 0.75rem 1.5rem;
+                background: rgba(0, 212, 255, 0.1);
+                border: 1px solid rgba(0, 212, 255, 0.3);
                 border-radius: 6px;
-                border: 1px solid #333333;
                 transition: all 0.2s ease;
             }
             
             .card a:hover {
-                background-color: #333333;
-                border-color: #555555;
+                background: rgba(0, 212, 255, 0.2);
+                border-color: #00d4ff;
             }
             
-            .status-badge {
-                display: inline-flex;
-                align-items: center;
-                gap: 0.5rem;
-                background-color: #0070f3;
-                color: #ffffff;
-                padding: 0.25rem 0.75rem;
-                border-radius: 20px;
-                font-size: 0.75rem;
-                font-weight: 500;
-                margin-bottom: 2rem;
+            .feature-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                gap: 1rem;
+                margin-top: 3rem;
+                width: 100%;
+                max-width: 900px;
             }
             
-            .status-dot {
-                width: 6px;
-                height: 6px;
-                background-color: #00ff88;
-                border-radius: 50%;
-            }
-            
-            pre {
-                background-color: #0a0a0a;
-                border: 1px solid #333333;
-                border-radius: 6px;
+            .feature {
                 padding: 1rem;
-                overflow-x: auto;
-                margin: 0;
+                background: rgba(0, 0, 0, 0.3);
+                border-left: 3px solid #00d4ff;
+                border-radius: 4px;
             }
             
-            code {
-                font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+            .feature-title {
+                font-weight: 600;
+                color: #00d4ff;
+                margin-bottom: 0.5rem;
+            }
+            
+            .feature-desc {
                 font-size: 0.85rem;
-                line-height: 1.5;
-                color: #ffffff;
-            }
-            
-            /* Syntax highlighting */
-            .keyword {
-                color: #ff79c6;
-            }
-            
-            .string {
-                color: #f1fa8c;
-            }
-            
-            .function {
-                color: #50fa7b;
-            }
-            
-            .class {
-                color: #8be9fd;
-            }
-            
-            .module {
-                color: #8be9fd;
-            }
-            
-            .variable {
-                color: #f8f8f2;
-            }
-            
-            .decorator {
-                color: #ffb86c;
+                color: #888888;
             }
             
             @media (max-width: 768px) {
@@ -278,20 +369,8 @@ def read_root():
                     gap: 1rem;
                 }
                 
-                .nav-links {
-                    margin-left: 0;
-                }
-                
-                main {
-                    padding: 2rem 1rem;
-                }
-                
                 h1 {
                     font-size: 2rem;
-                }
-                
-                .hero-code {
-                    grid-template-columns: 1fr;
                 }
                 
                 .cards {
@@ -303,42 +382,82 @@ def read_root():
     <body>
         <header>
             <nav>
-                <a href="/" class="logo">Vercel + FastAPI</a>
+                <a href="/" class="logo">🧠 RayMine</a>
                 <div class="nav-links">
                     <a href="/docs">API Docs</a>
-                    <a href="/api/data">API</a>
+                    <a href="/api/data">Sample Data</a>
                 </div>
             </nav>
         </header>
         <main>
             <div class="hero">
-                <h1>Vercel + FastAPI</h1>
-                <div class="hero-code">
-                    <pre><code><span class="keyword">from</span> <span class="module">fastapi</span> <span class="keyword">import</span> <span class="class">FastAPI</span>
-
-<span class="variable">app</span> = <span class="class">FastAPI</span>()
-
-<span class="decorator">@app.get</span>(<span class="string">"/"</span>)
-<span class="keyword">def</span> <span class="function">read_root</span>():
-    <span class="keyword">return</span> {<span class="string">"Python"</span>: <span class="string">"on Vercel"</span>}</code></pre>
+                <div class="status-badge">
+                    <span class="status-dot"></span>
+                    AI Consciousness Engine Active
                 </div>
+                <h1>FastAPI + RayMine</h1>
+                <p class="subtitle">
+                    Intelligent cognition layer powered by OpenAI GPT-4 and Supabase
+                </p>
             </div>
             
             <div class="cards">
                 <div class="card">
-                    <h3>Interactive API Docs</h3>
-                    <p>Explore this API's endpoints with the interactive Swagger UI. Test requests and view response schemas in real-time.</p>
-                    <a href="/docs">Open Swagger UI →</a>
+                    <h3>🧠 Cognition Engine</h3>
+                    <p>Process queries through OpenAI GPT-4 with intelligent context retrieval from Supabase memory.</p>
+                    <a href="/docs#/Cognition">View Endpoints →</a>
                 </div>
                 
                 <div class="card">
-                    <h3>Sample Data</h3>
-                    <p>Access sample JSON data through our REST API. Perfect for testing and development purposes.</p>
-                    <a href="/api/data">Get Data →</a>
+                    <h3>💾 Memory System</h3>
+                    <p>Store and retrieve memories using Supabase PostgreSQL with semantic search capabilities.</p>
+                    <a href="/docs#/Memory">View Endpoints →</a>
                 </div>
                 
+                <div class="card">
+                    <h3>📊 Vector Embeddings</h3>
+                    <p>pgvector support for semantic search and context-aware memory retrieval.</p>
+                    <a href="/docs">Learn More →</a>
+                </div>
+            </div>
+            
+            <div class="feature-grid">
+                <div class="feature">
+                    <div class="feature-title">🚀 OpenAI Integration</div>
+                    <div class="feature-desc">GPT-4 powered cognition and reasoning</div>
+                </div>
+                <div class="feature">
+                    <div class="feature-title">🗄️ Supabase Backend</div>
+                    <div class="feature-desc">PostgreSQL with real-time capabilities</div>
+                </div>
+                <div class="feature">
+                    <div class="feature-title">🔄 Async Support</div>
+                    <div class="feature-desc">Non-blocking async operations</div>
+                </div>
+                <div class="feature">
+                    <div class="feature-title">📝 Conversation Memory</div>
+                    <div class="feature-desc">Persistent conversation history</div>
+                </div>
+                <div class="feature">
+                    <div class="feature-title">🔍 Semantic Search</div>
+                    <div class="feature-desc">Context-aware memory retrieval</div>
+                </div>
+                <div class="feature">
+                    <div class="feature-title">⚡ FastAPI</div>
+                    <div class="feature-desc">Modern, fast Python framework</div>
+                </div>
             </div>
         </main>
     </body>
     </html>
     """
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "main:app",
+        host=settings.fastapi_host,
+        port=settings.fastapi_port,
+        reload=settings.fastapi_reload,
+    )
